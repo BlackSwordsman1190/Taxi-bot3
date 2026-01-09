@@ -174,23 +174,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def language_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle language selection and show localized order button"""
+    """Handle language selection.
+
+    - If user selects Ukrainian, immediately start the ordering flow (ask for name).
+      This avoids the duplicated greeting (we already showed Ukrainian on /start).
+    - If user selects English, show the short localized welcome and the localized Order button.
+    """
     text = update.message.text
     if text == LANG_UK:
+        # User selected Ukrainian: set language and immediately start ordering
         context.user_data["lang"] = "uk"
+        # Proceed directly to the order flow (ask for name)
+        return await order_taxi(update, context)
     elif text == LANG_EN:
+        # User selected English: set language and show localized welcome + order button
         context.user_data["lang"] = "en"
+        order_btn = tr(context, "order_button")
+        keyboard = [[KeyboardButton(order_btn)]]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+        await update.message.reply_text(tr(context, "welcome"), reply_markup=reply_markup)
+        return ConversationHandler.END
     else:
-        # unknown input: treat as english and continue
+        # unknown input: treat as english and show order button
         context.user_data["lang"] = "en"
-
-    order_btn = tr(context, "order_button")
-    keyboard = [[KeyboardButton(order_btn)]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-
-    # Use the shorter localized welcome (no selection text)
-    await update.message.reply_text(tr(context, "welcome"), reply_markup=reply_markup)
-    return ConversationHandler.END
+        order_btn = tr(context, "order_button")
+        keyboard = [[KeyboardButton(order_btn)]]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+        await update.message.reply_text(tr(context, "welcome"), reply_markup=reply_markup)
+        return ConversationHandler.END
 
 
 async def order_taxi(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -350,11 +361,15 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             except Exception as e:
                 logger.error(f"Failed to notify admin about missing drivers: {e}")
-        # show a short prompt + start button (avoid duplicating the confirmation text)
+        # preserve language, clear other user data, and show short prompt + start button
+        lang = context.user_data.get("lang", "en")
         context.user_data.clear()
+        context.user_data["lang"] = lang
+
         order_btn = tr(context, "order_button")
         keyboard = [[KeyboardButton(order_btn)]]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
         await query.edit_message_text(tr(context, "no_drivers_passenger"))
         await context.bot.send_message(
             chat_id=update.effective_chat.id, text=tr(context, "start_again"), reply_markup=reply_markup
@@ -387,13 +402,16 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.error(f"Failed to notify admin: {e}")
 
+    # preserve language so start_again is shown in the same language
+    lang = context.user_data.get("lang", "en")
     # Send only one final confirmation text (edited inline message) to avoid duplication
-    await query.edit_message_text(tr(context, "order_accepted"))
+    await query.edit_message_text(TRANSLATIONS.get(lang, TRANSLATIONS["en"])["order_accepted"])
 
-    # Clear user data
+    # Clear user data but keep language
     context.user_data.clear()
+    context.user_data["lang"] = lang
 
-    # Show start button again with a short prompt (no duplicate confirmation)
+    # Show start button again with a short prompt (no duplicate confirmation) in user's language
     order_btn = tr(context, "order_button")
     keyboard = [[KeyboardButton(order_btn)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -404,7 +422,10 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel the conversation"""
+    # preserve language when cancelling
+    lang = context.user_data.get("lang", "en")
     context.user_data.clear()
+    context.user_data["lang"] = lang
 
     order_btn = tr(context, "order_button")
     keyboard = [[KeyboardButton(order_btn)]]
