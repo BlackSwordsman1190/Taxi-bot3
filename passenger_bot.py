@@ -30,13 +30,18 @@ logger = logging.getLogger(__name__)
 # States for conversation
 NAME, PHONE, PICKUP, DROPOFF, CONFIRM = range(5)
 
+# Language buttons
+LANG_UK = "🇺🇦 Українська"
+LANG_EN = "🇬🇧 English"
+
 # Environment variables
 PASSENGER_BOT_TOKEN = os.getenv("PASSENGER_BOT_TOKEN")
 DRIVER_BOT_TOKEN = os.getenv("DRIVER_BOT_TOKEN")
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "itsbarhit")
 
 # Driver storage
-DRIVER_STORE_FILE = "drivers.json"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DRIVER_STORE_FILE = os.path.join(BASE_DIR, "drivers.json")
 
 
 def load_driver_ids() -> List[int]:
@@ -62,25 +67,124 @@ def save_driver_ids(ids: List[int]) -> None:
 # Storage for driver chat IDs (persistent)
 driver_chat_ids = load_driver_ids()
 
+# Simple translation dictionary for passenger-facing messages
+TRANSLATIONS = {
+    "en": {
+        "welcome": "Welcome to our Taxi Service! 🚕\n\nSelect your language:",
+        "order_button": "🚖 Order Taxi",
+        "ask_name": "Please enter your name:",
+        "share_phone_prompt": "Please share your phone number:\n(You can share your contact or type the number manually)",
+        "send_pickup_prompt": "Please send your pickup location:\n(You can send your current location or type the address)",
+        "ask_dropoff": "Please enter the drop-off address:",
+        "order_summary_title": "📋 Order Summary:\n\n",
+        "name_label": "👤 Name",
+        "phone_label": "📱 Phone",
+        "pickup_label": "📍 Pickup",
+        "dropoff_label": "🏁 Drop-off",
+        "comment_label": "💬 Comment",
+        "waze_label": "🔗 Waze Navigation",
+        "contact_username": "💬 Contact customer: @{username}",
+        "contact_phone": "💬 Contact customer by phone: {phone}",
+        "no_drivers_admin": "⚠️ New order from {customer} but no drivers are registered. Please add drivers using /add_driver CHAT_ID.",
+        "no_drivers_passenger": "⚠️ No drivers are currently registered. The admin has been notified.",
+        "order_accepted": "✅ Your order has been accepted, wait for a call from the driver.",
+        "thank_you": "Thank you for using our service!",
+        "add_comment_prompt": "Please enter your comment:",
+        "order_delivery_failed": "⚠️ ORDER DELIVERY FAILED\n\nCustomer: {customer}\nFailed to deliver to {count} driver(s)",
+        "cancelled": "Order cancelled. Press the button to start a new order.",
+        "not_authorized": "⛔ You are not authorized to use this command.",
+        "add_driver_usage": "Usage: /add_driver CHAT_ID",
+        "remove_driver_usage": "Usage: /remove_driver CHAT_ID",
+        "invalid_chat_id": "❌ Invalid chat ID. Please provide a numeric chat ID.",
+        "driver_added": "✅ Driver {chat_id} added successfully!\nTotal drivers: {count}",
+        "driver_exists": "⚠️ Driver {chat_id} already exists!",
+        "driver_removed": "✅ Driver {chat_id} removed successfully!\nTotal drivers: {count}",
+        "driver_not_found": "⚠️ Driver {chat_id} not found!",
+        "no_drivers_registered": "📋 No drivers registered yet.",
+        "drivers_list": "📋 Registered Drivers ({count}):\n\n{list}",
+    },
+    "uk": {
+        "welcome": "Ласкаво просимо до сервісу Таксі! 🚕\n\nВиберіть мову:",
+        "order_button": "🚖 Замовити таксі",
+        "ask_name": "Введіть ваше ім'я:",
+        "share_phone_prompt": "Будь ласка, надішліть номер телефону:\n(Ви можете поділитися контактом або ввести номер вручну)",
+        "send_pickup_prompt": "Будь ласка, надішліть місце посадки:\n(Ви можете надіслати поточне місцезнаходження або ввести адресу)",
+        "ask_dropoff": "Введіть адресу призначення:",
+        "order_summary_title": "📋 Підсумок замовлення:\n\n",
+        "name_label": "👤 Ім'я",
+        "phone_label": "📱 Телефон",
+        "pickup_label": "📍 Місце посадки",
+        "dropoff_label": "🏁 Місце призначення",
+        "comment_label": "💬 Коментар",
+        "waze_label": "🔗 Waze Навігація",
+        "contact_username": "💬 Контактувати з клієнтом: @{username}",
+        "contact_phone": "💬 Контактувати з клієнтом по телефону: {phone}",
+        "no_drivers_admin": "⚠️ Нове замовлення від {customer}, але водії не зареєстровані. Додайте водіїв за допомогою /add_driver CHAT_ID.",
+        "no_drivers_passenger": "⚠️ Наразі немає зареєстрованих водіїв. Адміністратор повідомлений.",
+        "order_accepted": "✅ Ваше замовлення прийнято, очікуйте дзвінка від водія.",
+        "thank_you": "Дякуємо за використання сервісу!",
+        "add_comment_prompt": "Будь ласка, введіть ваш коментар:",
+        "order_delivery_failed": "⚠️ ДОСТАВКА ЗАМОВЛЕННЯ НЕ УДАЛАСЯ\n\nКлієнт: {customer}\nНе вдалося доставити {count} водію(ям)",
+        "cancelled": "Замовлення скасовано. Натисніть кнопку щоб почати нове замовлення.",
+        "not_authorized": "⛔ У вас немає доступу до цієї команди.",
+        "add_driver_usage": "Використання: /add_driver CHAT_ID",
+        "remove_driver_usage": "Використання: /remove_driver CHAT_ID",
+        "invalid_chat_id": "❌ Невірний chat ID. Будь ласка, вкажіть числовий chat ID.",
+        "driver_added": "✅ Водій {chat_id} успішно доданий!\nЗагалом водіїв: {count}",
+        "driver_exists": "⚠️ Водій {chat_id} вже існує!",
+        "driver_removed": "✅ Водій {chat_id} успішно видалений!\nЗагалом водіїв: {count}",
+        "driver_not_found": "⚠️ Водій {chat_id} не знайдений!",
+        "no_drivers_registered": "📋 Немає зареєстрованих водіїв.",
+        "drivers_list": "📋 Зареєстровані водії ({count}):\n\n{list}",
+    },
+}
+
+
+def tr(context: ContextTypes.DEFAULT_TYPE, key: str, **kwargs) -> str:
+    """Translate by user's selected language, fallback to English."""
+    lang = context.user_data.get("lang", "en")
+    text = TRANSLATIONS.get(lang, TRANSLATIONS["en"]).get(key, TRANSLATIONS["en"].get(key, ""))
+    try:
+        return text.format(**kwargs)
+    except Exception:
+        return text
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start command - show welcome message with order button"""
-    keyboard = [[KeyboardButton("🚖 Order Taxi")]]
+    """Start command - ask for language selection first"""
+    keyboard = [[KeyboardButton(LANG_UK), KeyboardButton(LANG_EN)]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+    # default english shown above; language will be set after user taps a flag button
+    await update.message.reply_text(TRANSLATIONS["en"]["welcome"], reply_markup=reply_markup)
+    return ConversationHandler.END
+
+
+async def language_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle language selection and show localized order button"""
+    text = update.message.text
+    if text == LANG_UK:
+        context.user_data["lang"] = "uk"
+    elif text == LANG_EN:
+        context.user_data["lang"] = "en"
+    else:
+        # unknown input: treat as english and continue
+        context.user_data["lang"] = "en"
+
+    order_btn = tr(context, "order_button")
+    keyboard = [[KeyboardButton(order_btn)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
-    await update.message.reply_text(
-        "Welcome to our Taxi Service! 🚕\n\n"
-        "Press the button below to order a taxi.",
-        reply_markup=reply_markup,
-    )
+    await update.message.reply_text(tr(context, "welcome"), reply_markup=reply_markup)
     return ConversationHandler.END
 
 
 async def order_taxi(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start the order process"""
-    await update.message.reply_text(
-        "Please enter your name:", reply_markup=ReplyKeyboardRemove()
-    )
+    # ensure language is set; if not, default to english
+    if "lang" not in context.user_data:
+        context.user_data["lang"] = "en"
+
+    await update.message.reply_text(tr(context, "ask_name"), reply_markup=ReplyKeyboardRemove())
     return NAME
 
 
@@ -92,11 +196,7 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[KeyboardButton("📱 Share Contact", request_contact=True)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
-    await update.message.reply_text(
-        "Please share your phone number:\n"
-        "(You can share your contact or type the number manually)",
-        reply_markup=reply_markup,
-    )
+    await update.message.reply_text(tr(context, "share_phone_prompt"), reply_markup=reply_markup)
     return PHONE
 
 
@@ -111,11 +211,7 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[KeyboardButton("📍 Send Current Location", request_location=True)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
-    await update.message.reply_text(
-        "Please send your pickup location:\n"
-        "(You can send your current location or type the address)",
-        reply_markup=reply_markup,
-    )
+    await update.message.reply_text(tr(context, "send_pickup_prompt"), reply_markup=reply_markup)
     return PICKUP
 
 
@@ -134,9 +230,7 @@ async def get_pickup(update: Update, context: ContextTypes.DEFAULT_TYPE):
         address = update.message.text.replace(" ", "%20")
         context.user_data["waze_link"] = f"https://waze.com/ul?q={address}&navigate=yes"
 
-    await update.message.reply_text(
-        "Please enter the drop-off address:", reply_markup=ReplyKeyboardRemove()
-    )
+    await update.message.reply_text(tr(context, "ask_dropoff"), reply_markup=ReplyKeyboardRemove())
     return DROPOFF
 
 
@@ -147,16 +241,16 @@ async def get_dropoff(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Show summary with confirm and add comment buttons
     summary = (
-        f"📋 Order Summary:\n\n"
-        f"👤 Name: {context.user_data['name']}\n"
-        f"📱 Phone: {context.user_data['phone']}\n"
-        f"📍 Pickup: {context.user_data['pickup']}\n"
-        f"🏁 Drop-off: {context.user_data['dropoff']}\n"
+        f"{tr(context, 'order_summary_title')}"
+        f"{tr(context, 'name_label')}: {context.user_data['name']}\n"
+        f"{tr(context, 'phone_label')}: {context.user_data['phone']}\n"
+        f"{tr(context, 'pickup_label')}: {context.user_data['pickup']}\n"
+        f"{tr(context, 'dropoff_label')}: {context.user_data['dropoff']}\n"
     )
 
     keyboard = [
-        [InlineKeyboardButton("✅ Confirm Order", callback_data="confirm")],
-        [InlineKeyboardButton("💬 Add Comment", callback_data="add_comment")],
+        [InlineKeyboardButton("✅ " + ("Confirm" if context.user_data.get("lang", "en") == "en" else "Підтвердити"), callback_data="confirm")],
+        [InlineKeyboardButton("💬 " + ("Add Comment" if context.user_data.get("lang", "en") == "en" else "Додати коментар"), callback_data="add_comment")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -168,7 +262,7 @@ async def add_comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Ask for comment"""
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("Please enter your comment:")
+    await query.edit_message_text(tr(context, "add_comment_prompt"))
     context.user_data["waiting_for_comment"] = True
     return CONFIRM
 
@@ -181,15 +275,15 @@ async def receive_comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Show updated summary
         summary = (
-            f"📋 Order Summary:\n\n"
-            f"👤 Name: {context.user_data['name']}\n"
-            f"📱 Phone: {context.user_data['phone']}\n"
-            f"📍 Pickup: {context.user_data['pickup']}\n"
-            f"🏁 Drop-off: {context.user_data['dropoff']}\n"
-            f"💬 Comment: {context.user_data['comment']}\n"
+            f"{tr(context, 'order_summary_title')}"
+            f"{tr(context, 'name_label')}: {context.user_data['name']}\n"
+            f"{tr(context, 'phone_label')}: {context.user_data['phone']}\n"
+            f"{tr(context, 'pickup_label')}: {context.user_data['pickup']}\n"
+            f"{tr(context, 'dropoff_label')}: {context.user_data['dropoff']}\n"
+            f"{tr(context, 'comment_label')}: {context.user_data['comment']}\n"
         )
 
-        keyboard = [[InlineKeyboardButton("✅ Confirm Order", callback_data="confirm")]]
+        keyboard = [[InlineKeyboardButton("✅ " + ("Confirm" if context.user_data.get("lang", "en") == "en" else "Підтвердити"), callback_data="confirm")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await update.message.reply_text(summary, reply_markup=reply_markup)
@@ -201,30 +295,30 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    # Prepare order message for drivers
+    # Prepare order message for drivers (use customer's selected language where possible)
     customer_username = update.effective_user.username
     customer_name = context.user_data.get("name", "Unknown")
 
     order_lines = [
         "🚖 NEW ORDER",
         "",
-        f"👤 Name: {context.user_data.get('name','')}",
-        f"📱 Phone: {context.user_data.get('phone','')}",
-        f"📍 Pickup: {context.user_data.get('pickup','')}",
-        f"🏁 Drop-off: {context.user_data.get('dropoff','')}",
+        f"{tr(context, 'name_label')}: {context.user_data.get('name','')}",
+        f"{tr(context, 'phone_label')}: {context.user_data.get('phone','')}",
+        f"{tr(context, 'pickup_label')}: {context.user_data.get('pickup','')}",
+        f"{tr(context, 'dropoff_label')}: {context.user_data.get('dropoff','')}",
     ]
     if context.user_data.get("comment"):
-        order_lines.append(f"💬 Comment: {context.user_data['comment']}")
+        order_lines.append(f"{tr(context, 'comment_label')}: {context.user_data['comment']}")
 
     order_lines.append("")  # spacer
-    order_lines.append(f"🔗 Waze Navigation: {context.user_data.get('waze_link','')}")
+    order_lines.append(f"{tr(context, 'waze_label')}: {context.user_data.get('waze_link','')}")
 
     # Contact line: prefer username, fall back to phone
     if customer_username:
-        order_lines.append(f"💬 Contact customer: @{customer_username}")
+        order_lines.append(f"{tr(context, 'contact_username', username=customer_username)}")
     else:
         phone = context.user_data.get("phone", "(no phone)")
-        order_lines.append(f"💬 Contact customer by phone: {phone}")
+        order_lines.append(tr(context, "contact_phone", phone=phone))
 
     order_message = "\n".join(order_lines)
 
@@ -232,20 +326,21 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not driver_chat_ids:
         admin_chat = context.bot_data.get("admin_chat_id")
         if admin_chat:
-            await context.bot.send_message(
-                chat_id=admin_chat,
-                text=(
-                    f"⚠️ New order from {customer_name} but no drivers are registered. "
-                    "Please add drivers using /add_driver CHAT_ID."
-                ),
-            )
-        await query.edit_message_text("⚠️ No drivers are currently registered. The admin has been notified.")
+            try:
+                await context.bot.send_message(
+                    chat_id=admin_chat,
+                    text=tr(context, "no_drivers_admin", customer=customer_name),
+                )
+            except Exception as e:
+                logger.error(f"Failed to notify admin about missing drivers: {e}")
+        await query.edit_message_text(tr(context, "no_drivers_passenger"))
         context.user_data.clear()
         # Show start button again
-        keyboard = [[KeyboardButton("🚖 Order Taxi")]]
+        order_btn = tr(context, "order_button")
+        keyboard = [[KeyboardButton(order_btn)]]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         await context.bot.send_message(
-            chat_id=update.effective_chat.id, text="Thank you for using our service!", reply_markup=reply_markup
+            chat_id=update.effective_chat.id, text=tr(context, "thank_you"), reply_markup=reply_markup
         )
         return ConversationHandler.END
 
@@ -255,9 +350,11 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     driver_bot = Bot(token=DRIVER_BOT_TOKEN) if DRIVER_BOT_TOKEN else context.bot
 
     failed_deliveries = []
+    logger.info(f"Attempting to deliver order to drivers: {driver_chat_ids}")
     for driver_id in driver_chat_ids:
         try:
             await driver_bot.send_message(chat_id=driver_id, text=order_message)
+            logger.info(f"Order sent to driver {driver_id}")
         except Exception as e:
             logger.error(f"Failed to send to driver {driver_id}: {e}")
             failed_deliveries.append(driver_id)
@@ -265,11 +362,7 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Notify admin if any failures
     if failed_deliveries:
         try:
-            admin_message = (
-                f"⚠️ ORDER DELIVERY FAILED\n\n"
-                f"Customer: @{customer_username or customer_name}\n"
-                f"Failed to deliver to {len(failed_deliveries)} driver(s)"
-            )
+            admin_message = tr(context, "order_delivery_failed", customer=(customer_username or customer_name), count=len(failed_deliveries))
             if "admin_chat_id" in context.bot_data:
                 await context.bot.send_message(
                     chat_id=context.bot_data["admin_chat_id"], text=admin_message
@@ -278,16 +371,17 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Failed to notify admin: {e}")
 
     # Always confirm to passenger
-    await query.edit_message_text("✅ Your order has been accepted, wait for a call from the driver.")
+    await query.edit_message_text(tr(context, "order_accepted"))
 
     # Clear user data
     context.user_data.clear()
 
     # Show start button again
-    keyboard = [[KeyboardButton("🚖 Order Taxi")]]
+    order_btn = tr(context, "order_button")
+    keyboard = [[KeyboardButton(order_btn)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await context.bot.send_message(
-        chat_id=update.effective_chat.id, text="Thank you for using our service!", reply_markup=reply_markup
+        chat_id=update.effective_chat.id, text=tr(context, "thank_you"), reply_markup=reply_markup
     )
 
     return ConversationHandler.END
@@ -297,27 +391,26 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancel the conversation"""
     context.user_data.clear()
 
-    keyboard = [[KeyboardButton("🚖 Order Taxi")]]
+    order_btn = tr(context, "order_button")
+    keyboard = [[KeyboardButton(order_btn)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-    await update.message.reply_text(
-        "Order cancelled. Press the button to start a new order.", reply_markup=reply_markup
-    )
+    await update.message.reply_text(tr(context, "cancelled"), reply_markup=reply_markup)
     return ConversationHandler.END
 
 
-# Admin commands
+# Admin commands (kept in default/english messages handled via tr where appropriate)
 async def add_driver(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Add driver chat ID (admin only)"""
     if update.effective_user.username != ADMIN_USERNAME:
-        await update.message.reply_text("⛔ You are not authorized to use this command.")
+        await update.message.reply_text(TRANSLATIONS["en"]["not_authorized"])
         return
 
     # Store admin chat ID for notifications
     context.bot_data["admin_chat_id"] = update.effective_chat.id
 
     if not context.args or len(context.args) != 1:
-        await update.message.reply_text("Usage: /add_driver CHAT_ID")
+        await update.message.reply_text(TRANSLATIONS["en"]["add_driver_usage"])
         return
 
     try:
@@ -326,22 +419,22 @@ async def add_driver(update: Update, context: ContextTypes.DEFAULT_TYPE):
             driver_chat_ids.append(chat_id)
             save_driver_ids(driver_chat_ids)
             await update.message.reply_text(
-                f"✅ Driver {chat_id} added successfully!\nTotal drivers: {len(driver_chat_ids)}"
+                TRANSLATIONS["en"]["driver_added"].format(chat_id=chat_id, count=len(driver_chat_ids))
             )
         else:
-            await update.message.reply_text(f"⚠️ Driver {chat_id} already exists!")
+            await update.message.reply_text(TRANSLATIONS["en"]["driver_exists"].format(chat_id=chat_id))
     except ValueError:
-        await update.message.reply_text("❌ Invalid chat ID. Please provide a numeric chat ID.")
+        await update.message.reply_text(TRANSLATIONS["en"]["invalid_chat_id"])
 
 
 async def remove_driver(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Remove driver chat ID (admin only)"""
     if update.effective_user.username != ADMIN_USERNAME:
-        await update.message.reply_text("⛔ You are not authorized to use this command.")
+        await update.message.reply_text(TRANSLATIONS["en"]["not_authorized"])
         return
 
     if not context.args or len(context.args) != 1:
-        await update.message.reply_text("Usage: /remove_driver CHAT_ID")
+        await update.message.reply_text(TRANSLATIONS["en"]["remove_driver_usage"])
         return
 
     try:
@@ -350,25 +443,25 @@ async def remove_driver(update: Update, context: ContextTypes.DEFAULT_TYPE):
             driver_chat_ids.remove(chat_id)
             save_driver_ids(driver_chat_ids)
             await update.message.reply_text(
-                f"✅ Driver {chat_id} removed successfully!\nTotal drivers: {len(driver_chat_ids)}"
+                TRANSLATIONS["en"]["driver_removed"].format(chat_id=chat_id, count=len(driver_chat_ids))
             )
         else:
-            await update.message.reply_text(f"⚠️ Driver {chat_id} not found!")
+            await update.message.reply_text(TRANSLATIONS["en"]["driver_not_found"].format(chat_id=chat_id))
     except ValueError:
-        await update.message.reply_text("❌ Invalid chat ID. Please provide a numeric chat ID.")
+        await update.message.reply_text(TRANSLATIONS["en"]["invalid_chat_id"])
 
 
 async def list_drivers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List all drivers (admin only)"""
     if update.effective_user.username != ADMIN_USERNAME:
-        await update.message.reply_text("⛔ You are not authorized to use this command.")
+        await update.message.reply_text(TRANSLATIONS["en"]["not_authorized"])
         return
 
     if not driver_chat_ids:
-        await update.message.reply_text("📋 No drivers registered yet.")
+        await update.message.reply_text(TRANSLATIONS["en"]["no_drivers_registered"])
     else:
         drivers_list = "\n".join([f"• {chat_id}" for chat_id in driver_chat_ids])
-        await update.message.reply_text(f"📋 Registered Drivers ({len(driver_chat_ids)}):\n\n{drivers_list}")
+        await update.message.reply_text(TRANSLATIONS["en"]["drivers_list"].format(count=len(driver_chat_ids), list=drivers_list))
 
 
 def main():
@@ -383,7 +476,10 @@ def main():
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("start", start),
-            MessageHandler(filters.Regex("^🚖 Order Taxi$"), order_taxi),
+            # language selection (flag buttons)
+            MessageHandler(filters.Regex(f"^{LANG_UK}$") | filters.Regex(f"^{LANG_EN}$"), language_select),
+            # order buttons (both languages)
+            MessageHandler(filters.Regex("^🚖 Order Taxi$") | filters.Regex("^🚖 Замовити таксі$"), order_taxi),
         ],
         states={
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
