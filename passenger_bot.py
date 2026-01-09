@@ -84,12 +84,19 @@ TRANSLATIONS = {
         "dropoff_label": "🏁 Drop-off",
         "comment_label": "💬 Comment",
         "waze_label": "🔗 Waze Navigation",
+        # final confirmation (user requested replacement)
+        "order_accepted": "✅Your order has been accepted, the driver will contact you soon",
+        # short label shown with start button after order (avoid duplicating the confirmation text)
+        "start_again": "Press the button to order again.",
+        # button texts
+        "share_contact_button": "📱 Share Contact",
+        "send_location_button": "📍 Send Current Location",
+        "confirm_button": "✅ Confirm Order",
+        "add_comment_button": "💬 Add Comment",
         "contact_username": "💬 Contact customer: @{username}",
         "contact_phone": "💬 Contact customer by phone: {phone}",
         "no_drivers_admin": "⚠️ New order from {customer} but no drivers are registered. Please add drivers using /add_driver CHAT_ID.",
         "no_drivers_passenger": "⚠️ No drivers are currently registered. The admin has been notified.",
-        "order_accepted": "✅ Your order has been accepted, wait for a call from the driver.",
-        "thank_you": "Thank you for using our service!",
         "add_comment_prompt": "Please enter your comment:",
         "order_delivery_failed": "⚠️ ORDER DELIVERY FAILED\n\nCustomer: {customer}\nFailed to deliver to {count} driver(s)",
         "cancelled": "Order cancelled. Press the button to start a new order.",
@@ -105,7 +112,7 @@ TRANSLATIONS = {
         "drivers_list": "📋 Registered Drivers ({count}):\n\n{list}",
     },
     "uk": {
-        # Short welcome (matches the one used on /start, but localized)
+        # Short welcome (matches the /start used text)
         "welcome": "Ласкаво просимо до сервісу AllNight Taxi! 🚕",
         "order_button": "🚖 Замовити таксі",
         "ask_name": "Введіть ваше ім'я:",
@@ -119,12 +126,17 @@ TRANSLATIONS = {
         "dropoff_label": "🏁 Місце призначення",
         "comment_label": "💬 Коментар",
         "waze_label": "🔗 Waze Навігація",
+        "order_accepted": "✅ Ваше замовлення прийнято, очікуйте дзвінка від водія.",
+        "start_again": "Натисніть кнопку, щоб замовити знову.",
+        # button texts (localized)
+        "share_contact_button": "📱 Надіслати контакт",
+        "send_location_button": "📍 Надіслати місцезнаходження",
+        "confirm_button": "✅ Підтвердити замовлення",
+        "add_comment_button": "💬 Додати коментар",
         "contact_username": "💬 Контактувати з клієнтом: @{username}",
         "contact_phone": "💬 Контактувати з клієнтом по телефону: {phone}",
         "no_drivers_admin": "⚠️ Нове замовлення від {customer}, але водії не зареєстровані. Додайте водіїв за допомогою /add_driver CHAT_ID.",
         "no_drivers_passenger": "⚠️ Наразі немає зареєстрованих водіїв. Адміністратор повідомлений.",
-        "order_accepted": "✅ Ваше замовлення прийнято, очікуйте дзвінка від водія.",
-        "thank_you": "Дякуємо за використання сервісу!",
         "add_comment_prompt": "Будь ласка, введіть ваш коментар:",
         "order_delivery_failed": "⚠️ ДОСТАВКА ЗАМОВЛЕННЯ НЕ УДАЛАСЯ\n\nКлієнт: {customer}\nНе вдалося доставити {count} водію(ям)",
         "cancelled": "Замовлення скасовано. Натисніть кнопку щоб почати нове замовлення.",
@@ -135,7 +147,7 @@ TRANSLATIONS = {
         "driver_added": "✅ Водій {chat_id} успішно доданий!\nЗагалом водіїв: {count}",
         "driver_exists": "⚠️ Водій {chat_id} вже існує!",
         "driver_removed": "✅ Водій {chat_id} успішно видалений!\nЗагалом водіїв: {count}",
-        "driver_not_found": "⚠️ Водій {chat_id} не знайдений!",
+        "driver_not_found": "⚠��� Водій {chat_id} не знайдений!",
         "no_drivers_registered": "📋 Немає зареєстрованих водіїв.",
         "drivers_list": "📋 Зареєстровані водії ({count}):\n\n{list}",
     },
@@ -195,8 +207,9 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Store name and ask for phone"""
     context.user_data["name"] = update.message.text
 
-    # Keyboard with share contact button
-    keyboard = [[KeyboardButton("📱 Share Contact", request_contact=True)]]
+    # Keyboard with share contact button (localized label)
+    contact_label = tr(context, "share_contact_button")
+    keyboard = [[KeyboardButton(contact_label, request_contact=True)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
     await update.message.reply_text(tr(context, "share_phone_prompt"), reply_markup=reply_markup)
@@ -210,8 +223,9 @@ async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         context.user_data["phone"] = update.message.text
 
-    # Keyboard with location button
-    keyboard = [[KeyboardButton("📍 Send Current Location", request_location=True)]]
+    # Keyboard with location button (localized label)
+    location_label = tr(context, "send_location_button")
+    keyboard = [[KeyboardButton(location_label, request_location=True)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
     await update.message.reply_text(tr(context, "send_pickup_prompt"), reply_markup=reply_markup)
@@ -242,7 +256,7 @@ async def get_dropoff(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["dropoff"] = update.message.text
     context.user_data["comment"] = ""
 
-    # Show summary with confirm and add comment buttons
+    # Show summary with confirm and add comment buttons (localized labels)
     summary = (
         f"{tr(context, 'order_summary_title')}"
         f"{tr(context, 'name_label')}: {context.user_data['name']}\n"
@@ -252,8 +266,8 @@ async def get_dropoff(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     keyboard = [
-        [InlineKeyboardButton("✅ " + ("Confirm" if context.user_data.get("lang", "en") == "en" else "Підтвердити"), callback_data="confirm")],
-        [InlineKeyboardButton("💬 " + ("Add Comment" if context.user_data.get("lang", "en") == "en" else "Додати коментар"), callback_data="add_comment")],
+        [InlineKeyboardButton(tr(context, "confirm_button"), callback_data="confirm")],
+        [InlineKeyboardButton(tr(context, "add_comment_button"), callback_data="add_comment")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -286,7 +300,7 @@ async def receive_comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"{tr(context, 'comment_label')}: {context.user_data['comment']}\n"
         )
 
-        keyboard = [[InlineKeyboardButton("✅ " + ("Confirm" if context.user_data.get("lang", "en") == "en" else "Підтвердити"), callback_data="confirm")]]
+        keyboard = [[InlineKeyboardButton(tr(context, "confirm_button"), callback_data="confirm")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await update.message.reply_text(summary, reply_markup=reply_markup)
@@ -336,14 +350,14 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             except Exception as e:
                 logger.error(f"Failed to notify admin about missing drivers: {e}")
-        await query.edit_message_text(tr(context, "no_drivers_passenger"))
+        # show a short prompt + start button (avoid duplicating the confirmation text)
         context.user_data.clear()
-        # Show start button again
         order_btn = tr(context, "order_button")
         keyboard = [[KeyboardButton(order_btn)]]
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await query.edit_message_text(tr(context, "no_drivers_passenger"))
         await context.bot.send_message(
-            chat_id=update.effective_chat.id, text=tr(context, "thank_you"), reply_markup=reply_markup
+            chat_id=update.effective_chat.id, text=tr(context, "start_again"), reply_markup=reply_markup
         )
         return ConversationHandler.END
 
@@ -365,27 +379,25 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Notify admin if any failures
     if failed_deliveries:
         try:
-            admin_message = tr(context, "order_delivery_failed", customer=(customer_username or customer_name), count=len(failed_deliveries))
+            admin_message = tr(
+                context, "order_delivery_failed", customer=(customer_username or customer_name), count=len(failed_deliveries)
+            )
             if "admin_chat_id" in context.bot_data:
-                await context.bot.send_message(
-                    chat_id=context.bot_data["admin_chat_id"], text=admin_message
-                )
+                await context.bot.send_message(chat_id=context.bot_data["admin_chat_id"], text=admin_message)
         except Exception as e:
             logger.error(f"Failed to notify admin: {e}")
 
-    # Always confirm to passenger
+    # Send only one final confirmation text (edited inline message) to avoid duplication
     await query.edit_message_text(tr(context, "order_accepted"))
 
     # Clear user data
     context.user_data.clear()
 
-    # Show start button again
+    # Show start button again with a short prompt (no duplicate confirmation)
     order_btn = tr(context, "order_button")
     keyboard = [[KeyboardButton(order_btn)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id, text=tr(context, "thank_you"), reply_markup=reply_markup
-    )
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=tr(context, "start_again"), reply_markup=reply_markup)
 
     return ConversationHandler.END
 
@@ -482,7 +494,7 @@ def main():
             # language selection (flag buttons)
             MessageHandler(filters.Regex(f"^{LANG_UK}$") | filters.Regex(f"^{LANG_EN}$"), language_select),
             # order buttons (both languages)
-            MessageHandler(filters.Regex("^🚖 Order Taxi$") | MessageHandler(filters.Regex("^🚖 Замовити таксі$"), order_taxi).callback if False else filters.Regex("^🚖 Замовити таксі$"), order_taxi),
+            MessageHandler(filters.Regex(r"^🚖 Order Taxi$") | filters.Regex(r"^🚖 Замовити таксі$"), order_taxi),
         ],
         states={
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
