@@ -1,5 +1,7 @@
 import os
+import json
 import logging
+from typing import List
 from telegram import (
     Update,
     ReplyKeyboardMarkup,
@@ -33,8 +35,32 @@ PASSENGER_BOT_TOKEN = os.getenv("PASSENGER_BOT_TOKEN")
 DRIVER_BOT_TOKEN = os.getenv("DRIVER_BOT_TOKEN")
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "itsbarhit")
 
-# Storage for driver chat IDs (in memory)
-driver_chat_ids = []
+# Driver storage
+DRIVER_STORE_FILE = "drivers.json"
+
+
+def load_driver_ids() -> List[int]:
+    try:
+        if os.path.exists(DRIVER_STORE_FILE):
+            with open(DRIVER_STORE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return [int(x) for x in data]
+    except Exception as e:
+        logger.error(f"Failed to load driver ids from {DRIVER_STORE_FILE}: {e}")
+    return []
+
+
+def save_driver_ids(ids: List[int]) -> None:
+    try:
+        with open(DRIVER_STORE_FILE, "w", encoding="utf-8") as f:
+            json.dump(ids, f)
+    except Exception as e:
+        logger.error(f"Failed to save driver ids to {DRIVER_STORE_FILE}: {e}")
+
+
+# Storage for driver chat IDs (persistent)
+driver_chat_ids = load_driver_ids()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -121,7 +147,7 @@ async def get_dropoff(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Show summary with confirm and add comment buttons
     summary = (
-        f"📋 *Order Summary:*\n\n"
+        f"📋 Order Summary:\n\n"
         f"👤 Name: {context.user_data['name']}\n"
         f"📱 Phone: {context.user_data['phone']}\n"
         f"📍 Pickup: {context.user_data['pickup']}\n"
@@ -134,7 +160,7 @@ async def get_dropoff(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(summary, parse_mode="Markdown", reply_markup=reply_markup)
+    await update.message.reply_text(summary, reply_markup=reply_markup)
     return CONFIRM
 
 
@@ -155,7 +181,7 @@ async def receive_comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Show updated summary
         summary = (
-            f"📋 *Order Summary:*\n\n"
+            f"📋 Order Summary:\n\n"
             f"👤 Name: {context.user_data['name']}\n"
             f"📱 Phone: {context.user_data['phone']}\n"
             f"📍 Pickup: {context.user_data['pickup']}\n"
@@ -166,7 +192,7 @@ async def receive_comment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[InlineKeyboardButton("✅ Confirm Order", callback_data="confirm")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await update.message.reply_text(summary, parse_mode="Markdown", reply_markup=reply_markup)
+        await update.message.reply_text(summary, reply_markup=reply_markup)
     return CONFIRM
 
 
@@ -176,25 +202,57 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     # Prepare order message for drivers
-    customer_username = update.effective_user.username or "No username"
+    customer_username = update.effective_user.username
     customer_name = context.user_data.get("name", "Unknown")
 
-    order_message = (
-        f"🚖 NEW ORDER\n\n"
-        f"👤 Name: {context.user_data.get('name','')}\n"
-        f"📱 Phone: {context.user_data.get('phone','')}\n"
-        f"📍 Pickup: {context.user_data.get('pickup','')}\n"
-        f"🏁 Drop-off: {context.user_data.get('dropoff','')}\n"
-    )
-
+    order_lines = [
+        "🚖 NEW ORDER",
+        "",
+        f"👤 Name: {context.user_data.get('name','')}",
+        f"📱 Phone: {context.user_data.get('phone','')}",
+        f"📍 Pickup: {context.user_data.get('pickup','')}",
+        f"🏁 Drop-off: {context.user_data.get('dropoff','')}",
+    ]
     if context.user_data.get("comment"):
-        order_message += f"💬 Comment: {context.user_data['comment']}\n"
+        order_lines.append(f"💬 Comment: {context.user_data['comment']}")
 
-    order_message += f"\n🔗 Waze Navigation: {context.user_data.get('waze_link','')}\n"
-    order_message += f"💬 Contact customer: @{customer_username}"
+    order_lines.append("")  # spacer
+    order_lines.append(f"🔗 Waze Navigation: {context.user_data.get('waze_link','')}")
+
+    # Contact line: prefer username, fall back to phone
+    if customer_username:
+        order_lines.append(f"💬 Contact customer: @{customer_username}")
+    else:
+        phone = context.user_data.get("phone", "(no phone)")
+        order_lines.append(f"💬 Contact customer by phone: {phone}")
+
+    order_message = "\n".join(order_lines)
+
+    # If no drivers are registered, notify admin and the passenger
+    if not driver_chat_ids:
+        admin_chat = context.bot_data.get("admin_chat_id")
+        if admin_chat:
+            await context.bot.send_message(
+                chat_id=admin_chat,
+                text=(
+                    f"⚠️ New order from {customer_name} but no drivers are registered. "
+                    "Please add drivers using /add_driver CHAT_ID."
+                ),
+            )
+        await query.edit_message_text("⚠️ No drivers are currently registered. The admin has been notified.")
+        context.user_data.clear()
+        # Show start button again
+        keyboard = [[KeyboardButton("🚖 Order Taxi")]]
+        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id, text="Thank you for using our service!", reply_markup=reply_markup
+        )
+        return ConversationHandler.END
 
     # Send to all drivers
-    driver_bot = Bot(token=DRIVER_BOT_TOKEN)
+    if not DRIVER_BOT_TOKEN:
+        logger.error("DRIVER_BOT_TOKEN not set. Cannot forward order to drivers.")
+    driver_bot = Bot(token=DRIVER_BOT_TOKEN) if DRIVER_BOT_TOKEN else context.bot
 
     failed_deliveries = []
     for driver_id in driver_chat_ids:
@@ -209,10 +267,9 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             admin_message = (
                 f"⚠️ ORDER DELIVERY FAILED\n\n"
-                f"Customer: @{customer_username} ({customer_name})\n"
+                f"Customer: @{customer_username or customer_name}\n"
                 f"Failed to deliver to {len(failed_deliveries)} driver(s)"
             )
-            # Get admin chat ID (this will be set when admin uses the bot)
             if "admin_chat_id" in context.bot_data:
                 await context.bot.send_message(
                     chat_id=context.bot_data["admin_chat_id"], text=admin_message
@@ -267,6 +324,7 @@ async def add_driver(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = int(context.args[0])
         if chat_id not in driver_chat_ids:
             driver_chat_ids.append(chat_id)
+            save_driver_ids(driver_chat_ids)
             await update.message.reply_text(
                 f"✅ Driver {chat_id} added successfully!\nTotal drivers: {len(driver_chat_ids)}"
             )
@@ -290,6 +348,7 @@ async def remove_driver(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = int(context.args[0])
         if chat_id in driver_chat_ids:
             driver_chat_ids.remove(chat_id)
+            save_driver_ids(driver_chat_ids)
             await update.message.reply_text(
                 f"✅ Driver {chat_id} removed successfully!\nTotal drivers: {len(driver_chat_ids)}"
             )
@@ -314,6 +373,10 @@ async def list_drivers(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """Start the bot"""
+    if not PASSENGER_BOT_TOKEN:
+        logger.error("PASSENGER_BOT_TOKEN not set. Exiting.")
+        return
+    # DRIVER_BOT_TOKEN is optional: if missing we attempt to send via passenger bot API object
     application = Application.builder().token(PASSENGER_BOT_TOKEN).build()
 
     # Conversation handler for ordering
