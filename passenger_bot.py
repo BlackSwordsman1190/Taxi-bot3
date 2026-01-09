@@ -70,7 +70,8 @@ driver_chat_ids = load_driver_ids()
 # Simple translation dictionary for passenger-facing messages
 TRANSLATIONS = {
     "en": {
-        "welcome": "Welcome to our Taxi Service! 🚕\n\nSelect your language:",
+        # Short welcome (no "select language" text)
+        "welcome": "Welcome to AllNight Taxi! 🚕",
         "order_button": "🚖 Order Taxi",
         "ask_name": "Please enter your name:",
         "share_phone_prompt": "Please share your phone number:\n(You can share your contact or type the number manually)",
@@ -104,7 +105,8 @@ TRANSLATIONS = {
         "drivers_list": "📋 Registered Drivers ({count}):\n\n{list}",
     },
     "uk": {
-        "welcome": "Ласкаво просимо до сервісу Таксі! 🚕\n\nВиберіть мову:",
+        # Short welcome (matches the one used on /start, but localized)
+        "welcome": "Ласкаво просимо до сервісу AllNight Taxi! 🚕",
         "order_button": "🚖 Замовити таксі",
         "ask_name": "Введіть ваше ім'я:",
         "share_phone_prompt": "Будь ласка, надішліть номер телефону:\n(Ви можете поділитися контактом або ввести номер вручну)",
@@ -154,8 +156,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start command - ask for language selection first"""
     keyboard = [[KeyboardButton(LANG_UK), KeyboardButton(LANG_EN)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-    # default english shown above; language will be set after user taps a flag button
-    await update.message.reply_text(TRANSLATIONS["en"]["welcome"], reply_markup=reply_markup)
+    # Show the requested Ukrainian-only initial message (no "select language" text)
+    await update.message.reply_text("Ласкаво просимо до сервісу AllNight Taxi! 🚕", reply_markup=reply_markup)
     return ConversationHandler.END
 
 
@@ -174,6 +176,7 @@ async def language_select(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[KeyboardButton(order_btn)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
+    # Use the shorter localized welcome (no selection text)
     await update.message.reply_text(tr(context, "welcome"), reply_markup=reply_markup)
     return ConversationHandler.END
 
@@ -479,7 +482,7 @@ def main():
             # language selection (flag buttons)
             MessageHandler(filters.Regex(f"^{LANG_UK}$") | filters.Regex(f"^{LANG_EN}$"), language_select),
             # order buttons (both languages)
-            MessageHandler(filters.Regex("^🚖 Order Taxi$") | filters.Regex("^🚖 Замовити таксі$"), order_taxi),
+            MessageHandler(filters.Regex("^🚖 Order Taxi$") | MessageHandler(filters.Regex("^🚖 Замовити таксі$"), order_taxi).callback if False else filters.Regex("^🚖 Замовити таксі$"), order_taxi),
         ],
         states={
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
